@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDF → Markdown</title>
+<link rel="icon" type="image/svg+xml" href="/static/icon.svg">
+<script>
+  // aplica o tema antes de desenhar a página (evita "piscar")
+  (function(){ let t; try{ t=JSON.parse(localStorage.getItem("pdf2md")||"{}").theme; }catch(e){}
+    if(t!=="light"&&t!=="dark") t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";
+    document.documentElement.dataset.theme=t; })();
+</script>
+<style>
+:root,[data-theme="dark"]{
+  --bg:#0b0f1a; --card:#121827; --card2:#171e30; --hover:#1c2540; --sel:#1a2240; --line:#232c44; --line2:#3a4772;
+  --dash:#34406a; --sw:#2a3454; --txt:#e8ecf6; --mut:#8b95b0; --pre:#cdd5ee; --ico1:#2b355c; --ico2:#1b2342; --icotxt:#aab6ff;
+  --acc:#6d7cff; --acc2:#a56bff; --acctxt:#9aa6ff; --ok:#2fd18b; --err:#ff5d73; --warn:#ffb84d;
+  --glow1:rgba(109,124,255,.18); --glow2:rgba(165,107,255,.14); --shadow:rgba(0,0,0,.4); --overlay:rgba(5,8,16,.7);
+  --tipbg:#1d2540; --r:16px; color-scheme:dark;
+}
+[data-theme="light"]{
+  --bg:#f4f6fb; --card:#ffffff; --card2:#f7f8fc; --hover:#eef0fb; --sel:#eef0ff; --line:#dde2ee; --line2:#b9c1dc;
+  --dash:#aeb8d8; --sw:#c9cfe0; --txt:#1a2033; --mut:#5d6782; --pre:#2a3148; --ico1:#e3e7fb; --ico2:#d3d9f6; --icotxt:#4b57c9;
+  --acc:#5464f0; --acc2:#8c4ff0; --acctxt:#4452d8; --ok:#11945c; --err:#d8344d; --warn:#b7720b;
+  --glow1:rgba(84,100,240,.10); --glow2:rgba(140,79,240,.08); --shadow:rgba(30,40,80,.15); --overlay:rgba(20,26,45,.45);
+  --tipbg:#ffffff; color-scheme:light;
+}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--txt);font:15px/1.5 "Segoe UI",system-ui,sans-serif;min-height:100vh;transition:background .2s,color .2s}
+.bg{position:fixed;inset:0;z-index:-1;background:
+  radial-gradient(900px 500px at 10% -10%,var(--glow1),transparent 60%),
+  radial-gradient(800px 500px at 100% 0,var(--glow2),transparent 60%)}
+main{max-width:1040px;margin:0 auto;padding:28px 20px 60px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:22px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:14px}
+.logo{width:46px;height:46px;flex:none;filter:drop-shadow(0 8px 18px rgba(109,124,255,.35))}
+h1{font-size:21px;font-weight:650;letter-spacing:-.2px}
+.sub{color:var(--mut);font-size:13px}
+.btn{background:var(--card2);border:1px solid var(--line);color:var(--txt);padding:8px 14px;border-radius:10px;cursor:pointer;font:inherit;font-size:13px;transition:.15s;text-decoration:none;display:inline-flex;gap:6px;align-items:center}
+.btn:hover{border-color:var(--acc);background:var(--hover)}
+.btn.sm{padding:5px 10px;font-size:12px;border-radius:8px}
+.btn.danger:hover{border-color:var(--err);color:var(--err)}
+.btn.icon{width:38px;justify-content:center;padding:8px 0;font-size:16px}
+.hdr-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+.drop{display:block;border:2px dashed var(--dash);border-radius:22px;padding:42px 20px;text-align:center;background:linear-gradient(180deg,var(--glow1),transparent);cursor:pointer;transition:.2s}
+.drop:hover,.drop.over{border-color:var(--acc);transform:translateY(-1px)}
+.drop svg{width:54px;height:54px;color:var(--acc);margin-bottom:10px}
+.drop h2{font-size:18px;font-weight:600}
+.drop p{color:var(--mut);font-size:13px;margin-top:4px}
+.drop b{color:var(--acc)}
+.fmts{display:flex;gap:6px;justify-content:center;margin-top:12px;flex-wrap:wrap}
+.fmt{font-size:11px;font-weight:600;padding:2px 9px;border-radius:99px;border:1px solid var(--line);color:var(--mut);background:var(--card)}
+
+.panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:20px;margin-top:18px}
+.panel h3{font-size:12px;text-transform:uppercase;letter-spacing:1.1px;color:var(--mut);margin-bottom:12px;font-weight:600;display:flex;gap:8px;align-items:center}
+.panel .note{color:var(--mut);font-size:12.5px;margin:-4px 0 12px}
+.engines{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px}
+.eng{border:1.5px solid var(--line);border-radius:14px;padding:14px;cursor:pointer;background:var(--card2);transition:.15s;position:relative}
+.eng:hover{border-color:var(--line2)}
+.eng.sel{border-color:var(--acc);box-shadow:0 0 0 3px var(--glow1);background:var(--sel)}
+.eng.off{opacity:.55;cursor:not-allowed}
+.eng .t{font-weight:600;display:flex;justify-content:space-between;align-items:center;gap:6px}
+.eng .d{color:var(--mut);font-size:12.5px;margin-top:6px}
+.eng .tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:9px}
+.tag{font-size:10.5px;padding:1px 7px;border-radius:6px;background:var(--hover);color:var(--mut);border:1px solid var(--line)}
+.badge{font-size:10.5px;padding:2px 8px;border-radius:99px;font-weight:600;white-space:nowrap}
+.badge.ok{background:color-mix(in srgb,var(--ok) 14%,transparent);color:var(--ok)}
+.badge.no{background:color-mix(in srgb,var(--err) 14%,transparent);color:var(--err)}
+
+.opts{display:grid;grid-template-columns:repeat(2,1fr);gap:12px 22px;margin-top:2px}
+@media(max-width:760px){.opts{grid-template-columns:1fr}}
+.opt{display:flex;gap:10px;align-items:flex-start;cursor:pointer;transition:opacity .15s}
+.opt.na{opacity:.45}
+.opt input{display:none}
+.sw{flex:none;width:36px;height:20px;border-radius:99px;background:var(--sw);position:relative;transition:.2s;margin-top:2px}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.opt input:checked+.sw{background:var(--acc)}
+.opt input:checked+.sw::after{left:19px}
+.opt .l{font-size:14px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.opt .h{color:var(--mut);font-size:12px}
+.opt .ap{font-size:10.5px;color:var(--mut);margin-top:2px}
+.opt .ap b{font-weight:600;color:var(--acctxt)}
+.row{display:flex;gap:12px;margin-top:16px;flex-wrap:wrap;align-items:flex-end}
+.field{flex:1;min-width:220px}
+.field label{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--mut);margin-bottom:5px}
+.field input{width:100%;background:var(--card2);border:1px solid var(--line);color:var(--txt);padding:9px 12px;border-radius:10px;font:inherit;font-size:14px}
+.field input:focus{outline:none;border-color:var(--acc)}
+.field.s{flex:0 0 160px;min-width:140px}
+.field .hint{color:var(--mut);font-size:11.5px;margin-top:5px}
+.apibox{border:1px dashed var(--line2);border-radius:12px;padding:14px;margin-top:16px;display:none}
+.apibox.on{display:block}
+.apibox .warn{color:var(--warn);font-size:12px;margin-top:8px}
+.wstatus{margin-top:14px;font-size:12.5px;color:var(--mut);display:none;gap:10px;align-items:center;flex-wrap:wrap;padding:9px 12px;border-radius:10px;background:var(--card2);border:1px solid var(--line)}
+.wstatus.on{display:flex}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);display:inline-block;box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 20%,transparent)}
+
+/* legenda (tooltip) */
+.tip{position:relative;display:inline-grid;place-items:center;width:16px;height:16px;border-radius:50%;border:1px solid var(--line2);color:var(--mut);font-size:10.5px;font-weight:700;cursor:help;font-style:normal;text-transform:none;letter-spacing:0;flex:none}
+.tip:hover{color:var(--acc);border-color:var(--acc)}
+.tip::after{content:attr(data-tip);position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);width:max-content;max-width:300px;white-space:pre-line;background:var(--tipbg);color:var(--txt);border:1px solid var(--line2);border-radius:10px;padding:9px 11px;font-size:12px;font-weight:400;line-height:1.45;box-shadow:0 10px 30px var(--shadow);opacity:0;pointer-events:none;transition:.12s;z-index:40;text-align:left}
+.tip:hover::after{opacity:1}
+.legend{display:flex;gap:14px;flex-wrap:wrap;color:var(--mut);font-size:12px;margin-top:12px}
+
+.qhead{display:flex;justify-content:space-between;align-items:center;margin:26px 2px 10px;gap:10px;flex-wrap:wrap}
+.qhead h2{font-size:16px;display:flex;gap:8px;align-items:center}
+.stats{color:var(--mut);font-size:13px}
+.job{display:flex;gap:14px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:9px;position:relative;overflow:hidden}
+.job.s-error{border-color:color-mix(in srgb,var(--err) 45%,transparent)}
+.job.s-done{border-color:color-mix(in srgb,var(--ok) 35%,transparent)}
+.ico{flex:none;width:40px;height:46px;border-radius:8px;background:linear-gradient(160deg,var(--ico1),var(--ico2));display:grid;place-items:center;font-size:10px;font-weight:700;color:var(--icotxt);letter-spacing:.5px}
+.ico.doc{color:#2b7de9}
+.meta{flex:1;min-width:0}
+.name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.info{color:var(--mut);font-size:12.5px;margin-top:1px}
+.err{color:var(--err);font-size:12.5px;margin-top:4px;word-break:break-word}
+.chip{flex:none;font-size:12px;font-weight:600;padding:4px 11px;border-radius:99px;display:inline-flex;gap:7px;align-items:center}
+.chip.queued{background:color-mix(in srgb,var(--mut) 15%,transparent);color:var(--mut)}
+.chip.running{background:color-mix(in srgb,var(--acc) 18%,transparent);color:var(--acctxt)}
+.chip.done{background:color-mix(in srgb,var(--ok) 15%,transparent);color:var(--ok)}
+.chip.error{background:color-mix(in srgb,var(--err) 15%,transparent);color:var(--err)}
+.spin{width:11px;height:11px;border-radius:50%;border:2px solid color-mix(in srgb,var(--acctxt) 35%,transparent);border-top-color:var(--acctxt);animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:360px}
+.bar{position:absolute;left:0;bottom:0;height:3px;width:100%;background:linear-gradient(90deg,transparent,var(--acc),var(--acc2),transparent);background-size:40% 100%;background-repeat:no-repeat;animation:bar 1.3s ease-in-out infinite}
+@keyframes bar{0%{background-position:-60% 0}100%{background-position:160% 0}}
+.empty{text-align:center;color:var(--mut);padding:26px;border:1px dashed var(--line);border-radius:14px;font-size:14px}
+@media(max-width:640px){.job{flex-wrap:wrap}.acts{max-width:none;width:100%;justify-content:flex-start}}
+
+.modal{position:fixed;inset:0;background:var(--overlay);backdrop-filter:blur(4px);display:none;place-items:center;z-index:20;padding:20px}
+.modal.on{display:grid}
+.box{background:var(--card);border:1px solid var(--line);border-radius:18px;width:min(900px,100%);max-height:86vh;display:flex;flex-direction:column}
+.box header{padding:16px 20px;margin:0;border-bottom:1px solid var(--line)}
+.box h2{font-size:16px}
+.box pre{padding:16px 20px;overflow:auto;font:12.5px/1.5 Consolas,monospace;color:var(--pre);white-space:pre-wrap;word-break:break-word;flex:1}
+.toasts{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:8px;z-index:30}
+.toast{background:var(--tipbg);color:var(--txt);border:1px solid var(--acc);padding:10px 14px;border-radius:10px;font-size:13px;box-shadow:0 8px 24px var(--shadow);max-width:360px}
+.toast.bad{border-color:var(--err)}
+</style>
+</head>
+<body>
+<div class="bg"></div>
+<main>
+  <header>
+    <div class="brand">
+      <img class="logo" src="/static/icon.svg" alt="">
+      <div><h1>PDF → Markdown</h1><div class="sub">Converta PDFs e documentos Word para Markdown e analise com IA usando menos tokens</div></div>
+    </div>
+    <div class="hdr-actions">
+      <button class="btn" id="btnOut" title="Abre no Explorer a pasta onde os arquivos .md são salvos">📁 Pasta de saída</button>
+      <button class="btn" id="btnLog" title="Mostra o arquivo logs/errors.log com as falhas registradas">⚠ Log de erros</button>
+      <button class="btn icon" id="btnTheme" title="Alternar modo dia / modo noite"></button>
+    </div>
+  </header>
+
+  <label class="drop" id="drop" for="file" title="Solte aqui PDFs ou documentos do Word; cada arquivo entra na fila de conversão">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+    <h2>Arraste seus arquivos aqui</h2>
+    <p>ou <b>clique para selecionar</b>. Pode enviar vários de uma vez.</p>
+    <div class="fmts"><span class="fmt">PDF</span><span class="fmt">DOCX</span><span class="fmt">DOC</span><span class="fmt">RTF</span><span class="fmt">ODT</span></div>
+    <input id="file" type="file" accept=".pdf,.doc,.docx,.docm,.rtf,.odt,application/pdf" multiple hidden>
+  </label>
+
+  <section class="panel">
+    <h3>Motor de conversão para PDF <i class="tip" data-tip="O motor escolhido aqui é usado para os PDFs.&#10;Documentos do Word (.docx, .doc, .rtf, .odt) não precisam de motor: são convertidos direto pelo Pandoc, em segundos, mantendo títulos, listas e tabelas.">?</i></h3>
+    <div class="engines" id="engines"></div>
+    <div class="legend">
+      <span>⏱ tempo médio por PDF (CPU)</span><span>🔒 processa no seu computador</span><span>☁ envia o arquivo para a internet</span>
+    </div>
+    <div class="apibox" id="apibox">
+      <div class="row" style="margin-top:0">
+        <div class="field">
+          <label for="apikey">Chave da API Datalab (Marker API) <i class="tip" data-tip="Crie uma conta em datalab.to, gere uma chave em API Keys e cole aqui.&#10;A chave fica salva em config.json, na pasta do app, e não vai para os logs.&#10;Também dá para usar a variável de ambiente DATALAB_API_KEY.">?</i></label>
+          <input id="apikey" type="password" autocomplete="off" placeholder="cole a chave aqui">
+          <div class="hint" id="apikeyHint"></div>
+        </div>
+        <button class="btn" id="btnKey" title="Salvar a chave no config.json local">Salvar chave</button>
+        <button class="btn danger" id="btnKeyDel" title="Apagar a chave salva">Remover</button>
+      </div>
+      <div class="warn">☁ Com a Marker API, o PDF é enviado aos servidores da Datalab (cobrança por página). Não use com documentos confidenciais.</div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h3>Opções <i class="tip" data-tip="Cada opção mostra a quais motores se aplica.&#10;Opções que não valem para o motor selecionado ficam esmaecidas e são ignoradas.">?</i></h3>
+    <div class="opts" id="opts"></div>
+    <div class="wstatus" id="wstatus"></div>
+    <div class="row">
+      <div class="field"><label for="out">Pasta de saída <i class="tip" data-tip="Onde os resultados são gravados: <pasta>/<nome-do-arquivo>/<nome>.md, com as imagens junto.&#10;Em branco = pasta 'saida' do app.">?</i></label><input id="out" placeholder="(padrão: pasta saida do app)"></div>
+      <div class="field s"><label for="tmo">Tempo limite (min) <i class="tip" data-tip="Se a conversão de um arquivo passar desse tempo, ela é cancelada e marcada como erro.&#10;PDFs grandes no Docling/Marker em CPU podem precisar de 15 a 30 min.">?</i></label><input id="tmo" type="number" min="1" max="120" value="15"></div>
+    </div>
+  </section>
+
+  <div class="qhead">
+    <h2>Fila de conversão <i class="tip" data-tip="Os arquivos são convertidos um por vez, na ordem de chegada.&#10;⬇ .md baixa o Markdown · ZIP baixa .md + imagens · Pasta abre o resultado no Explorer · ✕ remove da lista.">?</i></h2>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span class="stats" id="stats" title="Tokens estimados ≈ número de caracteres ÷ 4"></span>
+      <button class="btn sm" id="btnClear" title="Remove da lista os itens concluídos (os arquivos gerados continuam na pasta de saída)">Limpar concluídos</button>
+    </div>
+  </div>
+  <div id="list"></div>
+</main>
+
+<div class="modal" id="modal"><div class="box">
+  <header><h2 id="mTitle"></h2><div class="hdr-actions"><button class="btn sm" id="mCopy" title="Copiar o texto para a área de transferência">Copiar</button><button class="btn sm" id="mClose">Fechar</button></div></header>
+  <pre id="mBody"></pre>
+</div></div>
+<div class="toasts" id="toasts"></div>
+
+<script>
+const ENG = {
+  docling:{t:"Docling", d:"Melhor para artigos científicos: colunas, tabelas, fórmulas e figuras.",
+    tags:["⏱ 2–4 min","🔒 local"], tip:"IBM Docling, com modelos de IA de layout e tabelas.\nÉ o mais fiel em tabelas complexas.\nNa CPU é lento: ative 'Modo rápido' e 'Manter modelos carregados' para acelerar."},
+  marker:{t:"Marker", d:"Ótima ordem de leitura, equações em LaTeX e bom em PDFs escaneados.",
+    tags:["⏱ 1–3 min","🔒 local"], tip:"Marker, da Datalab, rodando no seu PC.\nBom com equações (LaTeX) e PDFs com várias colunas.\n'Modo rápido' usa só o texto do PDF, sem OCR."},
+  marker_api:{t:"Marker API", d:"O mesmo Marker, rodando nos servidores (GPU) da Datalab. Muito mais rápido.",
+    tags:["⏱ 5–30 s","☁ online","💲 pago"], tip:"Envia o PDF para a API da Datalab e recebe o Markdown pronto.\nPrecisa de internet e de uma chave de API (cobrança por página).\nNão use com documentos confidenciais."},
+  word:{t:"Word 365", d:"Usa o Word instalado + Pandoc. Rápido para PDFs simples; estrutura limitada.",
+    tags:["⏱ 10–30 s","🔒 local"], tip:"O Word abre o PDF (reflow), salva .docx e o Pandoc gera o Markdown.\nRápido, mas costuma perder títulos e bagunçar tabelas e fórmulas."},
+};
+const OFFICE = {t:"Documento Word"};
+const ALL = ["docling","marker","marker_api","word"];
+const OPTS = [
+  {k:"fast", l:"⚡ Modo rápido", h:"Troca um pouco de precisão por velocidade.", def:false, eng:["docling","marker","marker_api"],
+    tip:"Docling: usa o modelo de tabelas 'fast' em vez do 'accurate'.\nMarker: usa só a camada de texto do PDF, sem OCR (ignorado se OCR estiver ligado).\nMarker API: modo 'fast' em vez de 'balanced'.\nUse em PDFs com texto selecionável e tabelas simples."},
+  {k:"persistent", l:"🧠 Manter modelos carregados", h:"Carrega os modelos de IA uma vez e reaproveita nos próximos arquivos.", def:false, eng:["docling","marker"],
+    tip:"Sem esta opção, cada arquivo abre um processo novo, que recarrega os modelos (dezenas de segundos por arquivo).\nCom ela, o 1º arquivo demora o normal e os seguintes ficam bem mais rápidos.\nUsa mais memória RAM, liberada após 20 min sem uso ou no botão 'Liberar memória'."},
+  {k:"ocr", l:"OCR", h:"Reconhece texto em imagem, para PDFs escaneados. Bem mais lento.", def:false, eng:["docling","marker","marker_api"],
+    tip:"Ligue apenas se o PDF for uma imagem (não dá para selecionar o texto).\nEm PDFs normais, deixar desligado é mais rápido e não perde nada."},
+  {k:"no_images", l:"Sem imagens", h:"Remove figuras do Markdown (economiza tokens).", def:false, eng:[...ALL,"office"],
+    tip:"As figuras não são salvas e as referências a elas saem do texto.\nBom quando a IA só vai ler o texto."},
+  {k:"strip_refs", l:"Remover referências", h:"Corta a seção de referências bibliográficas.", def:false, eng:[...ALL,"office"],
+    tip:"Procura um título como 'Referências', 'References' ou 'Bibliografia' e remove essa seção inteira.\nReduz bastante os tokens em artigos científicos."},
+  {k:"clean", l:"Limpeza de ruído", h:"Remove cabeçalhos/rodapés repetidos e nº de página.", def:true, eng:[...ALL,"office"],
+    tip:"Remove linhas idênticas que se repetem 4 vezes ou mais (cabeçalho e rodapé) e linhas que são só número de página.\nDesligue se algum texto legítimo sumir."},
+  {k:"headings", l:"Detectar títulos", h:"Heurística por tamanho de fonte/negrito. Experimental.", def:false, eng:["word"],
+    tip:"O Word quase nunca cria estilos de título ao abrir um PDF.\nEsta opção marca como título os parágrafos com fonte maior ou em negrito, para virarem # no Markdown."},
+  {k:"keep_docx", l:"Manter .docx", h:"Guarda o .docx intermediário junto do .md.", def:false, eng:["word","office"],
+    tip:"Útil para conferir o que o Word gerou antes do Pandoc.\nPara arquivos .doc/.rtf, guarda a versão convertida para .docx."},
+];
+const OFFICE_RE = /\.(docx?|docm|rtf|odt)$/i, ACCEPT_RE = /\.(pdf|docx?|docm|rtf|odt)$/i;
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const engName = k => (ENG[k]||OFFICE).t;
+let avail = {}, state = {};
+try{ state = JSON.parse(localStorage.getItem("pdf2md") || "{}"); }catch(e){}
+state.engine ||= "docling"; state.opts ||= {}; state.tmo ||= 15; state.out ||= "";
+const save = () => { try{ localStorage.setItem("pdf2md", JSON.stringify(state)); }catch(e){} };
+
+function toast(msg, bad){ const e=document.createElement("div"); e.className="toast"+(bad?" bad":""); e.textContent=msg; $("#toasts").append(e); setTimeout(()=>e.remove(), 5000); }
+
+/* ---- tema ---- */
+function applyTheme(t){ document.documentElement.dataset.theme=t; $("#btnTheme").textContent = t==="dark" ? "☀️" : "🌙";
+  $("#btnTheme").title = t==="dark" ? "Mudar para o modo dia" : "Mudar para o modo noite"; }
+$("#btnTheme").onclick = () => { state.theme = document.documentElement.dataset.theme==="dark" ? "light" : "dark"; save(); applyTheme(state.theme); };
+applyTheme(document.documentElement.dataset.theme);
+
+function renderEngines(){
+  $("#engines").innerHTML = Object.entries(ENG).map(([k,v])=>{
+    const a = avail[k] || {available:false, reason:"Verificando…"};
+    return `<div class="eng ${state.engine===k?"sel":""} ${a.available||k==="marker_api"?"":"off"}" data-eng="${k}">
+      <div class="t"><span style="display:flex;gap:6px;align-items:center">${v.t}<i class="tip" data-tip="${esc(v.tip)}">?</i></span><span class="badge ${a.available?"ok":"no"}">${a.available?"disponível":(k==="marker_api"?"sem chave":"indisponível")}</span></div>
+      <div class="d">${v.d}</div><div class="tags">${v.tags.map(t=>`<span class="tag">${t}</span>`).join("")}</div>
+      ${a.available?"":`<div class="d" style="color:var(--err)">${esc(a.reason)}</div>`}</div>`;
+  }).join("");
+  $("#apibox").classList.toggle("on", state.engine==="marker_api");
+  renderOpts();
+}
+function renderOpts(){
+  $("#opts").innerHTML = OPTS.map(o=>{
+    const on = state.opts[o.k] ?? o.def, applies = o.eng.includes(state.engine);
+    const ap = o.eng.map(engName).join(", ");
+    return `<label class="opt ${applies?"":"na"}"><input type="checkbox" data-opt="${o.k}" ${on?"checked":""}><span class="sw"></span>
+      <span><div class="l">${o.l}<i class="tip" data-tip="${esc(o.tip)}">?</i></div><div class="h">${o.h}</div>
+      <div class="ap">${applies?"Vale para":"Não vale para o motor selecionado. Vale para"}: <b>${esc(ap)}</b></div></span></label>`;
+  }).join("");
+}
+function getOpts(){ const o={}; OPTS.forEach(x=>o[x.k]=state.opts[x.k] ?? x.def); o.timeout=Math.max(1,+state.tmo||15)*60; return o; }
+
+$("#engines").onclick = e => { if(e.target.closest(".tip")) return; const c=e.target.closest(".eng"); if(!c||c.classList.contains("off"))return; state.engine=c.dataset.eng; save(); renderEngines(); };
+$("#opts").onclick = e => { if(e.target.closest(".tip")) e.preventDefault(); };
+$("#opts").onchange = e => { state.opts[e.target.dataset.opt]=e.target.checked; save(); };
+$("#out").oninput = e => { state.out=e.target.value; save(); };
+$("#tmo").oninput = e => { state.tmo=e.target.value; save(); };
+
+/* ---- chave da API ---- */
+async function loadConfig(){
+  try{ const c=await (await fetch("/api/config")).json();
+    $("#apikeyHint").textContent = c.datalab_from_env ? `Usando a variável de ambiente DATALAB_API_KEY (${c.datalab_key}).`
+      : c.datalab_key ? `Chave salva: ${c.datalab_key}` : "Nenhuma chave salva.";
+  }catch(e){}
+}
+async function saveKey(val){
+  const r=await fetch("/api/settings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({datalab_api_key:val})});
+  const j=await r.json(); if(!r.ok){ toast(j.error||"Erro", true); return; }
+  avail=j.engines; $("#apikey").value=""; renderEngines(); loadConfig(); toast(val?"Chave salva.":"Chave removida.");
+}
+$("#btnKey").onclick=()=>{ const v=$("#apikey").value.trim(); if(!v){ toast("Cole a chave primeiro.", true); return; } saveKey(v); };
+$("#btnKeyDel").onclick=()=>saveKey("");
+
+/* ---- envio ---- */
+async function send(files){
+  files=[...files]; if(!files.length) return;
+  const ok = files.filter(f=>ACCEPT_RE.test(f.name));
+  if(files.length!==ok.length) toast(`${files.length-ok.length} arquivo(s) ignorado(s): use PDF, DOCX, DOC, RTF ou ODT.`, true);
+  if(!ok.length) return;
+  const hasPdf = ok.some(f=>!OFFICE_RE.test(f.name));
+  if(hasPdf && !avail[state.engine]?.available){
+    toast(state.engine==="marker_api" ? "Informe a chave da API Datalab antes de enviar PDFs." : "O motor selecionado não está disponível.", true); return; }
+  if(ok.some(f=>OFFICE_RE.test(f.name)) && !avail.office?.available){ toast("Conversão de documentos indisponível: "+(avail.office?.reason||""), true); return; }
+  const fd=new FormData();
+  ok.forEach(f=>fd.append("files", f));
+  fd.append("engine", state.engine); fd.append("opts", JSON.stringify(getOpts())); fd.append("out", state.out||"");
+  try{
+    const r=await fetch("/api/upload",{method:"POST",body:fd}); const j=await r.json();
+    if(!r.ok) throw new Error(j.error||"Falha no envio");
+    toast(`${j.created.length} arquivo(s) na fila.`);
+    if(j.rejected.length) toast("Rejeitados: "+j.rejected.join(", "), true);
+    poll();
+  }catch(err){ toast("Erro: "+err.message, true); }
+}
+const drop=$("#drop");
+$("#file").onchange = e => { send(e.target.files); e.target.value=""; };
+["dragenter","dragover"].forEach(ev=>window.addEventListener(ev,e=>{e.preventDefault(); drop.classList.add("over");}));
+["dragleave","drop"].forEach(ev=>window.addEventListener(ev,e=>{e.preventDefault(); if(ev==="drop"||e.relatedTarget===null) drop.classList.remove("over");}));
+window.addEventListener("drop", e => { if(e.dataTransfer?.files?.length) send(e.dataTransfer.files); });
+
+/* ---- fila ---- */
+const fmtT = s => s==null ? "" : (s<60 ? `${s.toFixed(0)}s` : `${Math.floor(s/60)}m ${Math.round(s%60)}s`);
+const ST = {queued:"Na fila", running:"Convertendo", done:"Concluído", error:"Erro"};
+const STT = {queued:"Aguardando a vez na fila", running:"Conversão em andamento", done:"Markdown gerado com sucesso", error:"A conversão falhou. Veja os Detalhes"};
+function renderJobs(jobs){
+  const done=jobs.filter(j=>j.status==="done"), errs=jobs.filter(j=>j.status==="error");
+  const tok=done.reduce((a,j)=>a+(j.tokens||0),0);
+  $("#stats").textContent = jobs.length ? `${done.length} ok · ${errs.length} erro(s) · ~${tok.toLocaleString("pt-BR")} tokens no total` : "";
+  if(!jobs.length){ $("#list").innerHTML='<div class="empty">Nenhum arquivo ainda. Solte seus PDFs ou documentos do Word na área acima.</div>'; return; }
+  $("#list").innerHTML = jobs.slice().reverse().map(j=>{
+    const acts = [], isDoc = OFFICE_RE.test(j.name);
+    if(j.status==="done") acts.push(
+      `<a class="btn sm" href="/api/jobs/${j.id}/download" title="Baixar só o arquivo Markdown">⬇ .md</a>`,
+      `<a class="btn sm" href="/api/jobs/${j.id}/zip" title="Baixar .md + imagens em um .zip">ZIP</a>`,
+      `<button class="btn sm" data-act="folder" data-id="${j.id}" title="Abrir a pasta do resultado no Explorer">Pasta</button>`);
+    if(j.status==="error"){
+      acts.push(`<button class="btn sm" data-act="detail" data-id="${j.id}" title="Ver a saída técnica do erro">Detalhes</button>`);
+      const opts = isDoc ? ["office"] : Object.keys(ENG).filter(k=>avail[k]?.available);
+      opts.forEach(k=>acts.push(`<button class="btn sm" data-act="retry" data-id="${j.id}" data-eng="${k}" title="Tentar de novo com ${engName(k)}">↻ ${engName(k)}</button>`));
+    }
+    if(j.status!=="running") acts.push(`<button class="btn sm danger" data-act="del" data-id="${j.id}" title="Remover da lista (não apaga o resultado da pasta de saída)">✕</button>`);
+    const info=[engName(j.engine), fmtT(j.elapsed), j.tokens!=null?`~${j.tokens.toLocaleString("pt-BR")} tokens`:null].filter(Boolean).join(" · ");
+    const ext = (j.name.match(/\.(\w+)$/)||[,"PDF"])[1].toUpperCase().slice(0,4);
+    return `<div class="job s-${j.status}"><div class="ico ${isDoc?"doc":""}">${esc(ext)}</div>
+      <div class="meta"><div class="name" title="${esc(j.name)}">${esc(j.name)}</div><div class="info" title="Motor · tempo de conversão · tokens estimados">${esc(info)}</div>
+      ${j.status==="error"?`<div class="err">${esc(j.message)}</div>`:""}</div>
+      <span class="chip ${j.status}" title="${STT[j.status]}">${j.status==="running"?'<i class="spin"></i>':""}${ST[j.status]}</span>
+      <div class="acts">${acts.join("")}</div>${j.status==="running"?'<div class="bar"></div>':""}</div>`;
+  }).join("");
+}
+let busy=false;
+async function poll(){ if(busy)return; busy=true; try{ const r=await fetch("/api/jobs"); renderJobs(await r.json()); }catch(e){} busy=false; }
+
+/* ---- modelos em memória ---- */
+async function pollWorkers(){
+  try{
+    const w=await (await fetch("/api/workers")).json();
+    const on=Object.entries(w).filter(([,s])=>s.running);
+    $("#wstatus").classList.toggle("on", on.length>0);
+    if(on.length) $("#wstatus").innerHTML = `<span class="dot"></span><span>Modelos em memória: ${on.map(([k,s])=>`<b>${engName(k)}</b> (${s.count} arquivo(s))`).join(", ")}</span>
+      <i class="tip" data-tip="Os modelos continuam carregados para acelerar os próximos arquivos.&#10;São liberados sozinhos após 20 min sem uso.">?</i>
+      <button class="btn sm" id="btnFree" title="Encerra os processos dos motores e libera a memória RAM">Liberar memória</button>`;
+  }catch(e){}
+}
+$("#wstatus").onclick = async e => { if(e.target.id==="btnFree"){ await api("/api/workers/stop"); toast("Memória liberada."); pollWorkers(); } };
+
+async function api(url, method="POST", body){
+  const r=await fetch(url,{method,headers:{"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined});
+  const j=await r.json().catch(()=>({})); if(!r.ok) toast(j.error||"Erro", true); return j;
+}
+function modal(title, text){ $("#mTitle").textContent=title; $("#mBody").textContent=text; $("#modal").classList.add("on"); }
+$("#mClose").onclick=()=>$("#modal").classList.remove("on");
+$("#modal").onclick=e=>{ if(e.target.id==="modal") $("#modal").classList.remove("on"); };
+$("#mCopy").onclick=()=>{ navigator.clipboard.writeText($("#mBody").textContent); toast("Copiado."); };
+
+$("#list").onclick = async e => {
+  const b=e.target.closest("[data-act]"); if(!b) return; const id=b.dataset.id;
+  if(b.dataset.act==="folder") api("/api/open","POST",{target:"job",id});
+  if(b.dataset.act==="del"){ await api(`/api/jobs/${id}`,"DELETE"); poll(); }
+  if(b.dataset.act==="retry"){ await api(`/api/jobs/${id}/retry`,"POST",{engine:b.dataset.eng}); poll(); }
+  if(b.dataset.act==="detail"){ const j=await (await fetch(`/api/jobs/${id}`)).json(); modal("Detalhes do erro — "+j.name, `${j.message}\n\n${j.detail||"(sem detalhes técnicos)"}`); }
+};
+$("#btnOut").onclick=()=>api("/api/open","POST",{target:"out"});
+$("#btnClear").onclick=async()=>{ await api("/api/clear"); poll(); };
+$("#btnLog").onclick=async()=>{ const t=await (await fetch("/api/log")).text(); modal("Log de erros (logs/errors.log)", t); };
+
+(async function init(){
+  $("#out").value=state.out; $("#tmo").value=state.tmo;
+  renderEngines();
+  try{ avail=await (await fetch("/api/engines")).json(); }catch(e){}
+  if(!avail[state.engine]?.available && state.engine!=="marker_api"){ const first=Object.keys(ENG).find(k=>avail[k]?.available); if(first){ state.engine=first; save(); } }
+  renderEngines(); loadConfig(); poll(); pollWorkers();
+  setInterval(poll, 1000); setInterval(pollWorkers, 4000);
+})();
+</script>
+</body>
+</html>
